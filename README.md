@@ -2,7 +2,7 @@ Hello developer. I want to show you my new creation – SuperLua. In this module
 
 1. **string**
 2. **string.bit**
-3. *"string.crypt**
+3. **string.crypt**
 4. **math**
 5. **table**
 6. **file_manager**
@@ -36,4 +36,9 @@ It also depends on the environment. If you are using this in roblox studio, then
 ```luau
 local super_lua = require(game.ReplicatedStorage.SuperLua)
 ```
-**And that's all**
+# Using
+It was previously shown how to load the module (using require), but the terminal uses a slightly different method:
+```bash
+lua -e 'local super_lua = require("super_lua")' # from string
+```
+# Examples
