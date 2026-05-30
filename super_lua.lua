@@ -3,10 +3,12 @@ super_lua.math = {}
 super_lua.math.limits = {}
 super_lua.string = {}
 super_lua.string.bit = {}
+super_lua.string.stego = {}
 super_lua.string.crypt = {}
 super_lua.file_manager = {}
 super_lua.table = {}
 super_lua.http = {}
+super_lua.palette = {}
 super_lua.kernel = {}
 
 
@@ -82,6 +84,15 @@ end
 
 super_lua.string.last = function(str)
    return str:sub(str:len(), str:len())
+end
+
+super_lua.string.unicodes = function(text)
+   local full = {}
+   for _, char in utf8.codes(text) do
+     local unicode = string.format("%02x", char)
+     table.insert(full, unicode)
+   end
+   return full
 end
 
 super_lua.string.trim = function(text)
@@ -401,6 +412,70 @@ super_lua.string.crypt.base64_decode = function(s)
     return table.concat(out)
 end
 
+
+
+-- ZWC: Zero Width Characters
+super_lua.string.stego.zwc_encode = function(text)
+        local hidden = ""
+        for i = 1, #text do
+            local byte = string.byte(text, i)
+            for bit = 7, 0, -1 do
+                local b = math.floor(byte / (2^bit)) % 2
+                if b == 0 then
+                    hidden = hidden .. "\226\128\139"
+                else
+                    hidden = hidden .. "\226\128\140"
+                end
+            end
+            hidden = hidden .. "\226\128\141"
+        end
+        return hidden
+end
+
+super_lua.string.stego.zwc_decode = function(hidden_text)
+        local decoded = ""
+        for char_bits in hidden_text:gmatch("[^\226\128\141]+") do
+            local byte = 0
+            local bit_index = 7
+
+            for u_char in char_bits:gmatch("\226\128[%139%140]") do
+                local bit = (u_char == "\226\128\140") and 1 or 0
+                byte = byte + bit * (2^bit_index)
+                bit_index = bit_index - 1
+            end
+            if bit_index < 7 then
+                decoded = decoded .. string.char(byte)
+            end
+        end
+        return decoded
+end
+
+-- UTC: Unicode Tag Characters 
+super_lua.string.stego.utc_encode = function(visible_text, hidden_text)
+        local ghost = ""
+        for i = 1, #hidden_text do
+            local byte = string.byte(hidden_text, i)
+            ghost = ghost .. utf8.char(0xE0000 + byte)
+        end
+        return visible_text .. ghost
+end
+
+super_lua.string.stego.utc_decode = function(text)
+        local decoded = ""
+        for _, codepoint in utf8.codes(text) do
+            if codepoint >= 0xE0000 and codepoint <= 0xE007F then
+                decoded = decoded .. string.char(codepoint - 0xE0000)
+            end
+        end
+        return decoded
+end
+
+super_lua.string.stego.rlo_mask = function(text)
+    return "\226\128\174" .. text
+end
+
+
+
 super_lua.string.crypt.adler32 = function(text)
    local a, b = 1, 0
    for i = 1, #text do
@@ -450,6 +525,25 @@ super_lua.string.crypt.url_decode = function(str)
   
   return str
 end
+
+
+
+super_lua.string.stego.homoglyph = function(str)
+   local chars = {
+   	a = "а", A = "Α", b = "", B = "Β", c = "\u{0441}", C = "", d = "ԁ", D = "", g = "\u{0261}",
+       e = "\u{0435}", E = "\u{2d39}", o = "\u{0585}", p = "р", y = "у", x = "", i = "\u{0456}", n = "\u{0578}", m = "", t = "", r = "", u = "\u{057d}", w = "",
+       q = "", s = "", v = "ν", z = "", f = "", l = "", k = "", j = "\u{0458}", h = ""
+   }
+   
+   local new = str
+   for char, newChar in next, chars do
+     new = new:gsub(char, newChar)
+   end
+   return new
+end
+-- IN DEVELOPING 
+
+
 
 super_lua.string.crypt.entropy = function(text)
    if type(text) ~= "string" or #text == 0 then
@@ -696,8 +790,11 @@ super_lua.math.sign = function(num)
    return (num > 0 and 1) or (num < 0 and -1) or (num == 0 and 0) or (num == math.nan and math.nan)
 end
 
-super_lua.math.hypot = function(a, b)
-   return math.sqrt(a ^ 2 + b ^ 2)
+super_lua.math.hypot = function(x, y, z)
+    if z then
+        return math.sqrt(x*x + y*y + z*z)
+    end
+    return math.sqrt(x*x + y*y)
 end
 
 super_lua.math.scope = function(array)
@@ -831,6 +928,10 @@ super_lua.math.csc = function(x)
    return 1 / math.sin(x)
 end
 
+super_lua.math.sectan = function(x)
+   return math.sin(x) / (math.cos(x) ^ 2)
+end
+
 super_lua.math.sinh = function(x)
    local e = math.exp(1)
    return (e ^ x - e ^ -x) / 2
@@ -943,6 +1044,28 @@ super_lua.math.prod_op = function(n, i, formula)
         table.insert(algorithm, expr(k))
      end
      return result, algorithm
+end
+
+super_lua.math.from_exp = function(num)
+    local str = tostring(num)
+    if not str:find("[eE]") then return str end
+    
+    local base, exp = str:match("^([%d%.%-]+)[eE]([%+%-]%d+)$")
+    if not base or not exp then return str end
+    
+    exp = tonumber(exp)
+    if exp < 0 then
+        local decimals = base:match("%.(%d+)")
+        local decimals_len = decimals and #decimals or 0
+        local precision = math.abs(exp) + decimals_len
+        local result = string.format("%." .. precision .. "f", num)
+        
+        result = result:gsub("0+$", "")
+        if result:sub(-1) == "." then result = result .. "0" end
+        return result
+    else
+        return string.format("%.0f", num)
+    end
 end
 
 super_lua.math.e = math.exp(1)
@@ -1077,15 +1200,86 @@ super_lua.math.disc = function(a, b, c)
       elseif disc == 0 then
           local x = -bb / (2 * aa)
           return {x1 = x, x2 = nil, ["disc"] = disc}
-      elseif disc <= 0 then
+      elseif disc < 0 then
           return {x1 = nil, x2 = nil, ["disc"] = disc}
       end
 end 
 
+super_lua.math.length = function(val, from, to)
+   local length_rates = {
+      m = 1,
+      cm = 0.01,
+      dm = 0.1,
+      mm = 0.001,
+      km = 1000,
+      inch = 0.0254,
+      foot = 0.3048,
+      yard = 0.9144,
+      mile = 1609.344, 
+      au = 149597870700,
+      ls = 299792458,
+      lm = 17987547480,
+      ly = 9460730472580800,
+      parsec = 9460730472580800 * 3.26
+   }
+
+   if type(val) == "table" then
+      from, to, val = val.from, val.to, val.val
+   end
+   
+   local from_rate = length_rates[from:lower()]
+   local to_rate = length_rates[to:lower()]
+   if not from_rate or not to_rate then return nil, "Invalid unit" end
+
+   return (val * from_rate) / to_rate
+end
+
+super_lua.math.weight = function(val, from, to)
+   local weight_rates = {
+   g = 1,
+   mg = 0.001,
+   kg = 1000,
+   cent = 100000,
+   ton = 1000000,
+   lb = 453.59237,
+   oz = 28.3495231, 
+   st = 6350,
+   carat = 0.2,
+   earth = 5.97e24,
+   sun = 1.989e30
+}
+
+   if type(val) == "table" then
+      from, to, val = val.from, val.to, val.val
+   end
+   
+   local from_rate = weight_rates[from:lower()]
+   local to_rate = weight_rates[to:lower()]
+   if not from_rate or not to_rate then return nil, "Invalid unit" end
+   
+   return (val * from_rate) / to_rate
+end
+
+super_lua.math.map = function(val, in_min, in_max, out_min, out_max)
+    return out_min + (val - in_min) * (out_max - out_min) / (in_max - in_min)
+end
+
+super_lua.math.std = function(tbl)
+    local len = rawlen(tbl)
+    if len <= 1 then return 0 end
+        
+    local mean = super_lua.math.avg(tbl)
+    local sum_sq = 0
+    for _, value in next, tbl do
+        sum_sq = sum_sq + (value - mean) ^ 2
+    end
+    return math.sqrt(sum_sq / len)
+end
+
 super_lua.math.avg = function(...)
     local args = {...}
       
-    if rawlen(args) >= 1 and type(args[1]) == "table" then
+    if rawlen(args) == 1 and type(args[1]) == "table" then
        local len, val = rawlen(args[1]), 0
        for _, value in next, args[1] do
            val = val + value
@@ -1100,7 +1294,7 @@ super_lua.math.avg = function(...)
     end
 end
 
-super_lua.math.fibonachi = function(n)
+super_lua.math.fibonacci = function(n)
    if n <= 0 then return {} end
    if n == 1 then return {0} end
    
@@ -1207,7 +1401,7 @@ super_lua.table.isdict = function(tabl)
      end
      return a
    end
-   return rawlen(tabl) ~= length(tabl) and not length(table.pack(table.unpack(tabl))) ~= length(tabl)
+   return rawlen(tabl) ~= length(tabl) and table.concat(tabl, "") == ""
 end 
 
 super_lua.table.ishybrid = function(tabl)
@@ -1226,10 +1420,71 @@ super_lua.table.ishybrid = function(tabl)
    return false
 end
 
+super_lua.table.map = function(tbl, f)
+    local t = {}
+    for k, v in next, tbl do t[k] = f(v, k) end
+    return t
+end
+
+super_lua.table.foreach = function(tbl, func)
+   for key, value in next, tbl do
+      func(key, value)
+   end
+end
+
+super_lua.table.shuffle = function(tbl)
+    local n = super_lua.table.length(tbl)
+    for i = n, 2, -1 do
+        local j = math.random(i)
+        tbl[i], tbl[j] = tbl[j], tbl[i]
+    end
+    return tbl
+end
+
+super_lua.table.compare = function(tbl1, tbl2)
+   if tbl1 == tbl2 then return true end
+   
+end
+
 super_lua.table.clear = function(tabl)
    for index, _ in next, tabl do
       rawset(tabl, index, nil)
    end
+end
+
+super_lua.table.compact = function(tabl)
+   for key, value in next, tabl do
+      if value == nil then
+         rawset(tabl, key, nil)
+      end
+   end
+end
+
+super_lua.table.any_found = function(tabl, mode, ...)
+   mode = (mode or "v"):lower()
+   local targets = {...}
+   
+   for key, value in next, tabl do
+      for _, target in next, targets do
+         if mode == "v" and value == target then return true
+         elseif mode == "k" and key == target then return true end
+      end
+   end
+   return false
+end
+
+super_lua.table.all_found = function(tabl, mode, ...)
+   mode = (mode or "v"):lower()
+   local targets = {...}
+   local length, count = rawlen(targets), 0
+   
+   for key, value in next, tabl do
+      for _, targ in next, targets do
+         if mode == "v" and value == targ then count = count + 1
+         elseif mode == "k" and key == targ then count = count + 1 end
+      end
+   end
+   return count == length
 end
 
 super_lua.table.create = function(count, var)
@@ -1435,6 +1690,22 @@ super_lua.file_manager.getinfo = function(path)
    }
 end
 
+super_lua.file_manager.abspath = function(path)
+   local odj = io.popen("realpath " .. path .. " 2>/dev/null")
+   local source = odj:read("*a"):gsub("\n$", "")
+   odj:close()
+   
+   return source
+end
+
+super_lua.file_manager.copy = function(file, folder)
+   local odj = io.popen("cp " .. file .. " " .. folder)
+   local src = odj:read("*a"):gsub("\n$", "")
+   odj:close()
+   
+   return src
+end
+
 
 
 super_lua.http.get = function(url)
@@ -1629,7 +1900,7 @@ super_lua.http.urlsplit = function(url)
    }
 end
 
-super_lua.http.generate_uuid = function()
+super_lua.http.generate_uuid4 = function()
     local template ='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
     return string.gsub(template, '[xy]', function (c)
         local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
@@ -1646,6 +1917,69 @@ super_lua.http.is_real_url = function(url)
    
    local code = tonumber(status)
    return code and code >= 200 and code < 400
+end
+
+
+
+super_lua.palette.rgb_to_hex = function(r, g, b)
+    return string.format("#%02x%02x%02x", r, g, b)
+end
+
+
+super_lua.palette.hex_to_rgb = function(hex)
+    hex = hex:gsub("#", "")
+    local r = tonumber(hex:sub(1, 2), 16)
+    local g = tonumber(hex:sub(3, 4), 16)
+    local b = tonumber(hex:sub(5, 6), 16)
+    return r, g, b
+end
+
+
+super_lua.palette.rgb_to_ansi = function(r, g, b)
+    local round = super_lua.math.round
+    r, g, b = math.min(r, 255), math.min(g, 255), math.min(b, 255)
+    local formula = 16 + (36 * round(r / 255 * 5)) + (6 * round(g / 255 * 5)) + round(b / 255 * 5)
+    return formula
+end
+
+super_lua.palette.hex_to_ansi = function(hex)
+   local r, g, b = super_lua.palette.hex_to_rgb(hex)
+   return super_lua.palette.rgb_to_ansi(r, g, b)
+end
+
+super_lua.palette.rich_text = function(params)
+   local text = (params.text or params.message) or ""
+   local color = params.color
+   local size = params.size or "18"
+   local font = (params.font or params.face) or "SourceSansPro"
+   local message = "<p><font "
+   
+   if color then
+      if type(color) == "table" then
+         local r, g, b = (color.r or color.R) or color[1], (color.g or color.G) or color[2], (color.b or color.B) or color[3]
+         message = message .. 'color="rgb(' ..r .. ', ' .. g .. ', ' .. b .. ')"'
+      elseif type(color) == "userdata" and color.R ~= nil then
+         local r, g, b = tostring(color.R), tostring(color.G), tostring(color.B)
+         message = message .. 'color="rgb(' .. r .. ', ' .. g .. ', ' .. b .. ')"'
+      elseif type(color) == "string" then
+         message = message .. 'color="' .. color .. '"'
+      end
+   end
+   
+   if size and size ~= "18" then
+      message = message .. ' size="' .. size .. '"'
+   end
+   
+   if font and font ~= "SourceSansPro" then
+      if type(font) == "userdata" and font.Name ~= nil and font.Name ~= "SourceSansPro" then
+         message = message .. ' face="' .. font.Name .. '"'
+      elseif type(font) == "string" then
+         message = message .. ' face="' .. font .. '"'
+      end
+   end
+   
+   message = message .. ">" .. text .. "</font></p>"
+   return message
 end
 
 
@@ -1704,16 +2038,23 @@ super_lua.kernel.islclosure = function(func)
   return debug.getinfo(func).what ~= "C"
 end
 
-super_lua.kernel.getrawmetatable = super_lua.kernel.clonefunction(debug.getmetatable)
-super_lua.kernel.setrawmetatable = super_lua.kernel.clonefunction(debug.setmetatable)
-super_lua.kernel.getreg = super_lua.kernel.clonefunction(debug.getregistry)
+super_lua.kernel.getrawmetatable = debug.getmetatable
+super_lua.kernel.setrawmetatable = debug.setmetatable
+super_lua.kernel.getreg = debug.getregistry
 
-super_lua.kernel.getlocal = super_lua.kernel.clonefunction(debug.getlocal)
-super_lua.kernel.setlocal = super_lua.kernel.clonefunction(debug.setlocal)
-super_lua.kernel.getupvalue = super_lua.kernel.clonefunction(debug.getupvalue)
-super_lua.kernel.setupvalue = super_lua.kernel.clonefunction(debug.setupvalue)
+super_lua.kernel.getlocal = debug.getlocal
+super_lua.kernel.setlocal = debug.setlocal
+super_lua.kernel.getupvalue = debug.getupvalue
+super_lua.kernel.setupvalue = debug.setupvalue
 
 super_lua.kernel.getupvalues = function(func)
+   if super_lua.kernel.isluau() then
+      if game:GetService("RunService"):IsStudio() then
+         error("Almost all functions in super_lua.kernel not supported in Roblox Studio", 0)
+         return
+      end
+   end
+   
    local am = debug.getinfo(func)
    
    if rawget(am, "nups") then
