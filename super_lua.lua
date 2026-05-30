@@ -15,7 +15,7 @@ super_lua.kernel = {}
 
 super_lua._PRELOAD = function(moduleName)
    if not _G[moduleName] then
-      if require then
+      if require and pcall() return require(moduleName) end) == true then
           return require(moduleName)
       elseif not require and debug ~= nil and rawget(debug, "getregistry") and rawget(debug.getregistry(), "_LOADED") then
          return rawget(debug.getregistry()._LOADED, moduleName)
