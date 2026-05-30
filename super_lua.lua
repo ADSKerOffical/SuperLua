@@ -36,11 +36,13 @@ local coroutine = super_lua._PRELOAD("coroutine")
 local arg = super_lua._PRELOAD("arg")
 
 super_lua._EXPORT = function(tabl, env)
+   pcall(function()
    for name, func in next, tabl do
        if not rawget(env, name) then
          rawset(env, name, func)
        end 
     end
+      end)
 end
 
 
