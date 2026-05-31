@@ -15,12 +15,16 @@ super_lua.kernel = {}
 
 super_lua._PRELOAD = function(moduleName)
    if not _G[moduleName] then
-      if require then
+      if require and pcall(function() return require(moduleName) end) == true then
           return require(moduleName)
       elseif not require and debug ~= nil and rawget(debug, "getregistry") and rawget(debug.getregistry(), "_LOADED") then
          return rawget(debug.getregistry()._LOADED, moduleName)
       elseif (not require and not debug) and package ~= nil and rawget(package, "loaded") then
          return package.loaded[moduleName]
+      elseif loadstring and (loadstring("return " .. moduleName) ~= nil) then
+         return loadstring("return " .. moduleName)()
+      elseif getfenv and getfenv()[moduleName] ~= nil then
+         return getfenv()[moduleName]
       end
     else
       return _G[moduleName] or {}
@@ -97,6 +101,44 @@ end
 
 super_lua.string.trim = function(text)
    return text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%c", "")
+end
+
+super_lua.string.only_ascii = function(text)
+   for char in text:gmatch(".") do
+      if string.byte(char) > 128 then
+         text = text:gsub(char, "")
+      end
+   end
+   return text
+end
+
+super_lua.string.lines = function(text)
+   local saved = {}
+   for str in text:gmatch("[^\r\n]+") do
+      table.insert(saved, str)
+   end
+   return saved
+end
+
+super_lua.string.title = function(str)
+    return (string.gsub(str, "(%a)([%w_']*)", function(first, rest)
+        return string.upper(first) .. string.lower(rest)
+    end))
+end
+
+super_lua.string.frequency = function(text)
+   local chars = {}
+   for char in text:gmatch(".") do
+      if not rawget(chars, char) then
+         local _, howMany = string.gsub(text, char, "")
+         rawset(chars, char, howMany)
+      end
+   end
+   return chars
+end
+
+super_lua.string.byte_size = function(text)
+   return utf8.len(text)
 end
 
 super_lua.string.interpolate = function(str, vars)
@@ -484,6 +526,20 @@ super_lua.string.stego.rlo_mask = function(text)
     return "\226\128\174" .. text
 end
 
+super_lua.string.stego.hide = function(text, mode)
+ mode = (mode or "zwsp"):lower()
+   if mode == "null" then
+      return "\u{0000}" ..text
+   elseif mode == "zwsp" then
+      local result = {}
+        for _, codepoint in utf8.codes(text) do
+            table.insert(result, utf8.char(codepoint))
+            table.insert(result, utf8.char(0x200B))
+        end
+        return table.concat(result)
+   end
+end
+
 
 
 super_lua.string.crypt.adler32 = function(text)
@@ -540,9 +596,9 @@ end
 
 super_lua.string.stego.homoglyph = function(str)
    local chars = {
-   	a = "а", A = "Α", b = "", B = "Β", c = "\u{0441}", C = "", d = "ԁ", D = "", g = "\u{0261}",
-       e = "\u{0435}", E = "\u{2d39}", o = "\u{0585}", p = "р", y = "у", x = "", i = "\u{0456}", n = "\u{0578}", m = "", t = "", r = "", u = "\u{057d}", w = "",
-       q = "", s = "", v = "ν", z = "", f = "", l = "", k = "", j = "\u{0458}", h = ""
+   	a = "а", A = "Α", b = "\u{1d5bb}", c = "\u{0441}", d = "ԁ", g = "\u{0261}",
+       e = "\u{0435}", E = "\u{2d39}", o = "\u{057d}", p = "р", y = "у", x = "x", i = "\u{0456}", n = "\u{0578}", m = "\u{1d5c6}", t = "t", r = "r", u = "\u{057d}", w = "w",
+       q = "q", s = "\u{1d5cc}", v = "ν", z = "z", f = "\u{0192}", l = "", k = "\u{03ba}", j = "\u{0458}", h = "h"
    }
    
    local new = str
@@ -976,16 +1032,12 @@ super_lua.math.cbrt = function(num)
    return num ^ (1 / 3)
 end
 
-super_lua.math.nextafter = function(num, upp)
-   return num + super_lua.math.ulp(upp)
-end
-
-super_lua.math.tg = math.tan
+super_lua.math.tg = rawget(math, "tan")
 super_lua.math.ctg = super_lua.math.cot
 super_lua.math.lg = super_lua.math.log10
-super_lua.math.arcsin = math.asin
-super_lua.math.arccos = math.acos
-super_lua.math.arctan = math.atan; super_lua.math.arctg = math.atan
+super_lua.math.arcsin = rawget(math, "asin")
+super_lua.math.arccos = rawget(math, "acos")
+super_lua.math.arctan = rawget(math, "atan"); super_lua.math.arctg = rawget(math, "atan")
 
 super_lua.math.area = function(params)
    if params == nil then return nil end
@@ -1214,6 +1266,15 @@ super_lua.math.disc = function(a, b, c)
           return {x1 = nil, x2 = nil, ["disc"] = disc}
       end
 end 
+
+super_lua.math.collatz = function(num)
+    local seq = {num}
+    while num ~= 1 do
+        num = (num % 2 == 0) and (num / 2) or (3 * num + 1)
+        table.insert(seq, num)
+    end
+    return seq
+end
 
 super_lua.math.length = function(val, from, to)
    local length_rates = {
