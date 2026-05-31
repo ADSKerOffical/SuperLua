@@ -293,7 +293,7 @@ end
 
 super_lua.string.bit.bor = function(a, b)
     a, b = a % d232, b % d232
-    return (a + b - bit_mod.band(a, b)) % d232
+    return (a + b - super_lua.string.bit.band(a, b)) % d232
 end
 
 super_lua.string.bit.lrotate = function(x, disp)
@@ -639,7 +639,11 @@ super_lua.string.crypt.entropy = function(text)
 end
 
 super_lua.string.crypt.sha256 = function(message)
-  local bit_ror = super_lua.string.bit.ror
+  local bit = super_lua.string.bit
+  local bit_ror = bit.ror
+  local band, bor, bxor, bnot = bit.band, bit.bor, bit.bxor, bit.bnot
+  local lshift, rshift = bit.lshift, bit.rshift
+
   local k = {
       0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
       0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -651,33 +655,31 @@ super_lua.string.crypt.sha256 = function(message)
       0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
   }
 
-  local function preprocess(message)
-      local len = #message
+  local function preprocess(msg)
+      local len = #msg
       local bitLen = len * 8
-      message = message .. "\128"
+      msg = msg .. "\128"
       local zeroPad = 64 - ((len + 9) % 64)
       if zeroPad ~= 64 then
-          message = message .. string.rep("\0", zeroPad)
+          msg = msg .. string.rep("\0", zeroPad)
       end
 
-      message = message .. string.char(
-          bitLen >> 56 & 0xFF,
-          bitLen >> 48 & 0xFF,
-          bitLen >> 40 & 0xFF,
-          bitLen >> 32 & 0xFF,
-          bitLen >> 24 & 0xFF,
-          bitLen >> 16 & 0xFF,
-          bitLen >> 8 & 0xFF,
-          bitLen & 0xFF
-      )
+      local b8 = bitLen % 256
+      local b7 = math.floor(bitLen / 256) % 256
+      local b6 = math.floor(bitLen / 65536) % 256
+      local b5 = math.floor(bitLen / 16777216) % 256
+      local b4 = math.floor(bitLen / 4294967296) % 256
+      local b3 = math.floor(bitLen / 1099511627776) % 256
+      local b2 = math.floor(bitLen / 281474976710656) % 256
+      local b1 = math.floor(bitLen / 72057594037927936) % 256
 
-      return message
+      return msg .. string.char(b1, b2, b3, b4, b5, b6, b7, b8)
   end
 
-  local function chunkify(message)
+  local function chunkify(msg)
       local chunks = {}
-      for i = 1, #message, 64 do
-          table.insert(chunks, message:sub(i, i + 63))
+      for i = 1, #msg, 64 do
+          table.insert(chunks, msg:sub(i, i + 63))
       end
       return chunks
   end
@@ -687,45 +689,45 @@ super_lua.string.crypt.sha256 = function(message)
 
       for i = 1, 64 do
           if i <= 16 then
-              w[i] = string.byte(chunk, (i - 1) * 4 + 1) << 24 |
-                     string.byte(chunk, (i - 1) * 4 + 2) << 16 |
-                     string.byte(chunk, (i - 1) * 4 + 3) << 8 |
-                     string.byte(chunk, (i - 1) * 4 + 4)
+              local b1, b2, b3, b4 = string.byte(chunk, (i - 1) * 4 + 1, (i - 1) * 4 + 4)
+                          w[i] = bor(bor(bor(lshift(b1, 24), lshift(b2, 16)), lshift(b3, 8)), b4)
           else
-              local s0 = bit_ror(w[i - 15], 7) ~ bit_ror(w[i - 15], 18) ~ (w[i - 15] >> 3)
-              local s1 = bit_ror(w[i - 2], 17) ~ bit_ror(w[i - 2], 19) ~ (w[i - 2] >> 10)
-              w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 0xFFFFFFFF
+              local w_15 = w[i - 15]
+              local w_2 = w[i - 2]
+              local s0 = bxor(bxor(bit_ror(w_15, 7), bit_ror(w_15, 18)), rshift(w_15, 3))
+              local s1 = bxor(bxor(bit_ror(w_2, 17), bit_ror(w_2, 19)), rshift(w_2, 10))
+              w[i] = band(w[i - 16] + s0 + w[i - 7] + s1, 0xFFFFFFFF)
           end
       end
 
       local a, b, c, d, e, f, g, h = table.unpack(hash)
 
       for i = 1, 64 do
-          local s1 = bit_ror(e, 6) ~ bit_ror(e, 11) ~ bit_ror(e, 25)
-          local ch = (e & f) ~ ((~e) & g)
-          local temp1 = (h + s1 + ch + k[i] + w[i]) & 0xFFFFFFFF
-          local s0 = bit_ror(a, 2) ~ bit_ror(a, 13) ~ bit_ror(a, 22)
-          local maj = (a & b) ~ (a & c) ~ (b & c)
-          local temp2 = (s0 + maj) & 0xFFFFFFFF
+          local s1 = bxor(bxor(bit_ror(e, 6), bit_ror(e, 11)), bit_ror(e, 25))
+          local ch = bxor(band(e, f), band(bnot(e), g))
+          local temp1 = band(h + s1 + ch + k[i] + w[i], 0xFFFFFFFF)
+          local s0 = bxor(bxor(bit_ror(a, 2), bit_ror(a, 13)), bit_ror(a, 22))
+          local maj = bxor(bxor(band(a, b), band(a, c)), band(b, c))
+          local temp2 = band(s0 + maj, 0xFFFFFFFF)
 
           h = g
           g = f
           f = e
-          e = (d + temp1) & 0xFFFFFFFF
+          e = band(d + temp1, 0xFFFFFFFF)
           d = c
           c = b
           b = a
-          a = (temp1 + temp2) & 0xFFFFFFFF
+          a = band(temp1 + temp2, 0xFFFFFFFF)
       end
 
-      return (hash[1] + a) & 0xFFFFFFFF,
-             (hash[2] + b) & 0xFFFFFFFF,
-             (hash[3] + c) & 0xFFFFFFFF,
-             (hash[4] + d) & 0xFFFFFFFF,
-             (hash[5] + e) & 0xFFFFFFFF,
-             (hash[6] + f) & 0xFFFFFFFF,
-             (hash[7] + g) & 0xFFFFFFFF,
-             (hash[8] + h) & 0xFFFFFFFF
+      return band(hash[1] + a, 0xFFFFFFFF),
+             band(hash[2] + b, 0xFFFFFFFF),
+             band(hash[3] + c, 0xFFFFFFFF),
+             band(hash[4] + d, 0xFFFFFFFF),
+             band(hash[5] + e, 0xFFFFFFFF),
+             band(hash[6] + f, 0xFFFFFFFF),
+             band(hash[7] + g, 0xFFFFFFFF),
+             band(hash[8] + h, 0xFFFFFFFF)
   end
 
   message = preprocess(message)
@@ -736,12 +738,12 @@ super_lua.string.crypt.sha256 = function(message)
       hash = {processChunk(chunk, hash)}
   end
 
-  local result = ""
+  local result = {}
   for _, h in ipairs(hash) do
-      result = result .. string.format("%08x", h)
+      table.insert(result, string.format("%08x", h))
   end
 
-  return result
+  return table.concat(result)
 end
 
 super_lua.string.crypt.to_binary = function(str)
