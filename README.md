@@ -3,10 +3,13 @@ Hello developer. I want to show you my new creation – SuperLua. In this module
 1. **string**
 2. **string.bit**
 3. **string.crypt**
-4. **math**
-5. **table**
-6. **file_manager**
-7. **kernel**  
+4. **string.stego**
+5. **math**
+6. **table**
+7. **file_manager**
+8. **palette**
+9. **luau**
+10. **kernel**  
 
 # Installation  
 The installation mainly depends on your environment  
