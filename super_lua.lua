@@ -2269,7 +2269,7 @@ end)
 
 super_lua.luau.getproperties = function(instance)
    local tabl = {}
-   local class = (typeof(instance) == "Instance" and instance.Name) or (type(instance) == "string" and instance)
+   local class = (typeof(instance) == "Instance" and instance.Name) or (type(instance) == "string" and instance:gsub(" ", ""))
    
    for _, prop in next, game:GetService("ReflectionService"):GetPropertiesOfClass(class) do
       table.insert(tabl, prop.Name)
@@ -2280,7 +2280,7 @@ end
 
 super_lua.luau.isexploit = function()
    local success, _ = pcall(function()
-      return game:GetService("UGCValidationService"):GetPropertyValue(settings(), "GetFFlag")
+      return game:GetService("UGCValidationService"):GetPropertyValue(settings(), "Name")
    end)
    return success
 end
