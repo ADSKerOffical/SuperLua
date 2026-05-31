@@ -10,6 +10,7 @@ super_lua.table = {}
 super_lua.http = {}
 super_lua.palette = {}
 super_lua.kernel = {}
+super_lua.luau = {}
 
 
 
@@ -31,13 +32,13 @@ super_lua._PRELOAD = function(moduleName)
    end
 end
 
-local string = super_lua._PRELOAD("string")
-local math = super_lua._PRELOAD("math")
-local table = super_lua._PRELOAD("table")
-local debug = super_lua._PRELOAD("debug")
-local io = super_lua._PRELOAD("io")
-local coroutine = super_lua._PRELOAD("coroutine")
-local arg = super_lua._PRELOAD("arg")
+local string = string or super_lua._PRELOAD("string")
+local math = math or super_lua._PRELOAD("math")
+local table = table or super_lua._PRELOAD("table")
+local debug = debug or super_lua._PRELOAD("debug")
+local io = io or super_lua._PRELOAD("io")
+local coroutine = coroutine or super_lua._PRELOAD("coroutine")
+local arg = arg or super_lua._PRELOAD("arg")
 
 super_lua._EXPORT = function(tabl, env)
    for name, func in next, tabl do
@@ -1517,6 +1518,16 @@ end
 super_lua.table.compare = function(tbl1, tbl2)
    if tbl1 == tbl2 then return true end
    
+   local lenf = super_lua.table.length
+   local count = 0
+   
+   if lenf(tbl1) ~= lenf(tbl2) then return false end
+   for index, value in next, tbl1 do
+       if rawget(tbl1, index) and rawget(tbl2, index) == rawget(tbl1, index) then
+          count = count + 1
+       end
+   end
+   return count == lenf(tbl1)
 end
 
 super_lua.table.clear = function(tabl)
@@ -1783,7 +1794,7 @@ end
 
 super_lua.http.get = function(url)
    if super_lua.kernel.isluau() then
-      return game:HttpGetAsync(url)
+      return game:HttpGet(url)
    end
    
    local res = io.popen("curl -s " .. url)
@@ -1981,6 +1992,16 @@ super_lua.http.generate_uuid4 = function()
     end)
 end
 
+super_lua.http.mcookie = function()
+    local res = {}
+    math.randomseed(os.time() + math.floor(os.clock() * 1000000))
+    
+    for i = 1, 32 do
+        table.insert(res, string.format("%x", math.random(0, 15)))
+    end
+    return table.concat(res)
+end
+
 super_lua.http.is_real_url = function(url)
    local cmd = string.format('curl -I -L -s -o /dev/null -w "%%{http_code}" "%s"', url)
    local file = io.popen(cmd)
@@ -1998,7 +2019,6 @@ super_lua.palette.rgb_to_hex = function(r, g, b)
     return string.format("#%02x%02x%02x", r, g, b)
 end
 
-
 super_lua.palette.hex_to_rgb = function(hex)
     hex = hex:gsub("#", "")
     local r = tonumber(hex:sub(1, 2), 16)
@@ -2006,7 +2026,6 @@ super_lua.palette.hex_to_rgb = function(hex)
     local b = tonumber(hex:sub(5, 6), 16)
     return r, g, b
 end
-
 
 super_lua.palette.rgb_to_ansi = function(r, g, b)
     local round = super_lua.math.round
@@ -2245,6 +2264,59 @@ super_lua.kernel._IAM = super_lua.kernel.newcclosure(function(key)
        ["sdk"] = exec("getprop ro.build.version.sdk")
    }
 end)
+
+
+
+super_lua.luau.getproperties = function(instance)
+   local tabl = {}
+   local class = (typeof(instance) == "Instance" and instance.Name) or (type(instance) == "string" and instance)
+   
+   for _, prop in next, game:GetService("ReflectionService"):GetPropertiesOfClass(class) do
+      table.insert(tabl, prop.Name)
+   end
+   
+   return tabl
+end
+
+super_lua.luau.isexploit = function()
+   local success, _ = pcall(function()
+      return game:GetService("UGCValidationService"):GetPropertyValue(settings(), "GetFFlag")
+   end)
+   return success
+end
+
+local LUAU_DESYNC = false
+super_lua.luau.network_desync = function(bool)
+   LUAU_DESYNC = bool
+   local plr = game.Players.LocalPlayer
+   
+   while LUAU_DESYNC and game:GetService("RunService").PreSimulation:Wait() do
+      for _, part in next, (plr.Character or plr.CharacterAdded:Wait()):GetDescendants() do
+         if part:IsA("BasePart") then
+            part.Anchored = true
+            part.Anchored = false
+         end
+      end
+   end
+end
+
+super_lua.luau.isprivateserver = function()
+   if game:GetService("RunService"):IsServer() then
+      return game.PrivateServerId ~= nil
+   elseif game:GetService("RunService"):IsClient() then
+   local cursor
+   repeat 
+   local response = game.HttpService:JSONDecode(game:HttpGetAsync("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?/sortOrder=Asc&limit=100" .. (cursor and "&cursor=" .. cursor or "")))
+   for _, server in next, response.data do
+      if server.id == game.JobId then
+       return false
+     end
+   end
+     cursor = response.nextPageCursor
+     until not cursor 
+     return true
+   end
+end
 
 
 
