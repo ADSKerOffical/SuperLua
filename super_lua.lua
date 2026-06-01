@@ -142,6 +142,28 @@ super_lua.string.byte_size = function(text)
    return utf8.len(text)
 end
 
+super_lua.string.any_found = function(text, ...)
+   local chars = {...}
+   for _, char in next, chars do
+      if string.find(text, char) then
+         return true
+      end
+   end
+   return false
+end
+
+super_lua.string.all_found = function(text, ...)
+   local chars = {...}
+   local len, count = rawlen(chars), 0
+   
+   for _, char in next, chars do
+      if string.find(text, char) then
+         count = count + 1
+      end
+   end
+   return count >= len
+end
+
 super_lua.string.interpolate = function(str, vars)
    return (str:gsub("{(.-)}", function(k) 
       return tostring(vars[k] or "{"..k.."}") 
@@ -949,6 +971,10 @@ super_lua.math.perc = function(num, percs)
    return num / 100 * (percs or 100)
 end
 
+super_lua.math.isfinite = function(x)
+    return type(x) == "number" and x == x and math.abs(x) ~= math.huge
+end
+
 super_lua.math.is_rational = function(num)
    return not super_lua.math.is_irrational(num)
 end
@@ -1092,7 +1118,7 @@ super_lua.math.area = function(params)
 end
 
 super_lua.math.sigma = function(n, i, formula)
-     local expr, sum = load("return function(n) return " .. formula .. " end", "Example", "bt", math)(), 0
+     local expr, sum = load("return function(n) return " .. formula .. " end", "Example", "bt", super_lua.math)(), 0
      local algorithm = {}
      for k = i, n do
         sum = sum + expr(k)
@@ -1102,7 +1128,7 @@ super_lua.math.sigma = function(n, i, formula)
 end
 
 super_lua.math.prod_op = function(n, i, formula)
-     local expr, result = load("return function(n) return " .. formula .. " end", "Example", "bt", math)(), 1
+     local expr, result = load("return function(n) return " .. formula .. " end", "Example", "bt", super_lua.math)(), 1
      local algorithm = {}
      for k = i, n do
         result = result * expr(k)
@@ -1141,23 +1167,69 @@ super_lua.math.inf = math.huge
 super_lua.math.nan = 0/0
 super_lua.math.tau = math.pi * 2
 
-super_lua.math.limits.int_max = 2147483647
-super_lua.math.limits.int_min = -2147483648
-super_lua.math.limits.double_max = 1.7976931348623157e308
-super_lua.math.limits.double_min_negative = -1.7976931348623157e308
-super_lua.math.limits.double_min_pv = 2.22507e-308
-super_lua.math.limits.double_true_min = 2 ^ -1074
-super_lua.math.limits.eps = 2.2250738585072014e-308
-super_lua.math.limits.shrt_max = 32767
-super_lua.math.limits.shrt_min = -32768
-super_lua.math.limits.ushrt_max = 65535
-super_lua.math.limits.ushrt_min = 0
-super_lua.math.limits.float_max = 3.402823466e38
-super_lua.math.limits.float_min = -3.402823466e38
-super_lua.math.limits.int8_max = 127
-super_lua.math.limits.int8_min = -128
-super_lua.math.limits.mantissa_max = 1e14 - 1
-super_lua.math.limits.tiny = 4.9406564584124654e-324
+
+
+super_lua.math.limits = {
+    double = {
+        max = 1.7976931348623157e308,
+        min = 2.2250738585072014e-308,
+        denormalized_min = 5e-324,
+        epsilon = 2.2204460492503131e-16,
+        mantissa_bits = 53,
+        exponent_bits = 11,
+        precision = 15,
+        bytes = 8
+    },
+    float = {
+        max = 3.4028235e38,
+        min = 1.17549435e-38,
+        denormalized_min = 1.4e-45,
+        epsilon = 1.1920929e-7,
+        mantissa_bits = 24,
+        exponent_bits = 8,
+        precision = 7,
+        bytes = 4
+    },
+    int = {
+        max = 2147483647,
+        min =  -2147483648,
+        unsigned_max = 4294967295,
+        bytes = 4
+    },
+    short = {
+        max = 32767,
+        min = -32768,
+        unsigned_max = 65535,
+        bytes = 2
+    },
+    long_long = {
+        max = 9223372036854775807,
+        min = -9223372036854775808,
+        unsigned_max = 18446744073709551615,
+        bytes = 8
+    }
+}
+
+super_lua.math.limits.is_overflow = function(value, type_name)
+    local limits = super_lua.math.limits[type_name]
+    if not limits then
+        return error("Unknown type: " .. tostring(type_name))
+    end
+
+    if type_name == "double" or type_name == "float" then
+        return not super_lua.math.isfinite(value)
+    end
+
+    if type_name == "long_long" or type_name == "long" then
+        local int = math.floor(value)
+        return int > limits.max or int < limits.min
+    end
+
+    local int = math.floor(value)
+    return int > limits.max or int < limits.min
+end
+
+
 
 super_lua.math.max = function(...)
    local args = {...}
@@ -2242,6 +2314,14 @@ super_lua.kernel.run_bash = function(source, ignoreError)
    return result
 end
 
+super_lua.kernel.is64bit = function()
+   local newFile = io.popen("getconf LONG_BIT 2>/dev/null")
+   local source = newFile:read("*a"):gsub("\n$", "")
+   newFile:close()
+   
+   return source == "64"
+end
+
 super_lua.kernel._IAM = super_lua.kernel.newcclosure(function(key)
    local function exec(src)
       local new = io.popen(src)
@@ -2285,21 +2365,6 @@ super_lua.luau.isexploit = function()
    return success
 end
 
-local LUAU_DESYNC = false
-super_lua.luau.network_desync = function(bool)
-   LUAU_DESYNC = bool
-   local plr = game.Players.LocalPlayer
-   
-   while LUAU_DESYNC and game:GetService("RunService").PreSimulation:Wait() do
-      for _, part in next, (plr.Character or plr.CharacterAdded:Wait()):GetDescendants() do
-         if part:IsA("BasePart") then
-            part.Anchored = true
-            part.Anchored = false
-         end
-      end
-   end
-end
-
 super_lua.luau.isprivateserver = function()
    if game:GetService("RunService"):IsServer() then
       return game.PrivateServerId ~= nil
@@ -2315,6 +2380,14 @@ super_lua.luau.isprivateserver = function()
      cursor = response.nextPageCursor
      until not cursor 
      return true
+   end
+end
+
+super_lua.luau.getcallingscript = function()
+   if game:GetService("RunService"):IsClient() and super_lua.luau.isexploit() then
+      return getfenv(0).script
+   elseif not super_lua.luau.isexploit() then
+      return debug.info(1, "s")
    end
 end
 
