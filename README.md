@@ -5,11 +5,12 @@ Hello developer. I want to show you my new creation – SuperLua. In this module
 3. **string.crypt**
 4. **string.stego**
 5. **math**
-6. **table**
-7. **file_manager**
-8. **palette**
-9. **luau**
-10. **kernel**  
+6. **math.limits**
+7. **table**
+8. **file_manager**
+9. **palette**
+10. **luau**
+11. **kernel**  
 
 # Installation  
 The installation mainly depends on your environment  
