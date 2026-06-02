@@ -2,12 +2,14 @@ local super_lua = {}
 super_lua.math = {}
 super_lua.math.limits = {}
 super_lua.string = {}
-super_lua.string.bit = {}
+super_lua.bit = {}
 super_lua.string.stego = {}
 super_lua.string.crypt = {}
+super_lua.debug = {}
 super_lua.file_manager = {}
 super_lua.table = {}
 super_lua.http = {}
+super_lua.time = {}
 super_lua.palette = {}
 super_lua.kernel = {}
 super_lua.luau = {}
@@ -53,6 +55,7 @@ end
 super_lua._EXPORT(math, super_lua.math)
 super_lua._EXPORT(string, super_lua.string)
 super_lua._EXPORT(table, super_lua.table)
+super_lua._EXPORT(debug, super_lua.debug)
 super_lua._EXPORT(io or {}, super_lua.file_manager)
 
 super_lua.string.split = function(stri, chars)
@@ -83,12 +86,25 @@ super_lua.string.is_alpha = function(str)
    return str:find("%A") == nil
 end
 
+super_lua.string.usub = function(str, posStart, posEnd)
+   local save = ""
+   posStart = posStart or 0
+   posEnd = posEnd or utf8.len(str)
+   
+   for pos, char in utf8.codes(str) do
+      if pos >= posStart and pos <= posEnd then
+         save = save .. utf8.char(char)
+      end
+   end
+   return save
+end
+
 super_lua.string.first = function(str)
-   return str:sub(1, 1)
+   return super_lua.string.unicode_sub(str, 1, 1)
 end
 
 super_lua.string.last = function(str)
-   return str:sub(str:len(), str:len())
+   return super_lua.string.unicode_sub(str, utf8.len(str), utf8.len(str))
 end
 
 super_lua.string.unicodes = function(text)
@@ -98,6 +114,10 @@ super_lua.string.unicodes = function(text)
      table.insert(full, unicode)
    end
    return full
+end
+
+super_lua.string.strip = function(text)
+   return text:gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 super_lua.string.trim = function(text)
@@ -111,6 +131,15 @@ super_lua.string.only_ascii = function(text)
       end
    end
    return text
+end
+
+super_lua.string.is_ascii = function(char)
+   for _, point in utf8.codes(char) do
+      if point > 128 then
+         return false
+      end
+   end
+   return true
 end
 
 super_lua.string.lines = function(text)
@@ -136,10 +165,6 @@ super_lua.string.frequency = function(text)
       end
    end
    return chars
-end
-
-super_lua.string.byte_size = function(text)
-   return utf8.len(text)
 end
 
 super_lua.string.any_found = function(text, ...)
@@ -171,25 +196,21 @@ super_lua.string.interpolate = function(str, vars)
 end
 
 super_lua.string.is_lowercase = function(str, startPos, endPos)
-   if startPos == nil and endPos == nil then
-      return str:lower() == str
-   else
-      return str:sub(startPos, endPos):lower() == str:sub(startPos, endPos)
-   end
+   startPos = startPos or 0
+   endPos = endPos or utf8.len(str)
+   return str:sub(startPos, endPos):lower() == str:sub(startPos, endPos)
 end
 
 super_lua.string.is_uppercase = function(str, startPos, endPos)
-   if startPos == nil and endPos == nil then
-      return str:upper() == str
-   else
-      return str:sub(startPos, endPos):upper() == str:sub(startPos, endPos)
-   end
+   startPos = startPos or 0
+   endPos = endPos or utf8.len(str)
+   return str:sub(startPos, endPos):upper() == str:sub(startPos, endPos)
 end
 
 super_lua.string.random_choice = function(str, howMany)
    local saved_str = ""
-   local random = math.random(1, #str)
-   saved_str = saved_str .. str:sub(random, random)
+   local random = math.random(1, utf8.len(str))
+   saved_str = saved_str .. super_lua.string.usub(str, random, random)
    return saved_str:rep(howMany or 1)
 end
 
@@ -262,7 +283,7 @@ super_lua.string.punctuation = "!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~"
 local d232 = 4294967296
 local d231 = 2147483648
 
-super_lua.string.bit.ror = function(x, y)
+super_lua.bit.ror = function(x, y)
     x = x % 4294967296
     y = y % 32
     if y == 0 then return x end
@@ -271,7 +292,7 @@ super_lua.string.bit.ror = function(x, y)
     return (math.floor(x / div) + (x % div) * mul) % 4294967296
 end
 
-super_lua.string.bit.rol = function(x, n)
+super_lua.bit.rol = function(x, n)
     x = x % 4294967296
     n = n % 32
     if n == 0 then return x end
@@ -280,19 +301,19 @@ super_lua.string.bit.rol = function(x, n)
     return ((x * mul) % 4294967296 + math.floor(x / div)) % 4294967296
 end
 
-super_lua.string.bit.lshift = function(x, by)
+super_lua.bit.lshift = function(x, by)
    return (x * (2 ^ (by % 32))) % d232
 end
 
-super_lua.string.bit.rshift = function(x, by)
+super_lua.bit.rshift = function(x, by)
    return math.floor((x % d232) / (2 ^ (by % 32)))
 end
 
-super_lua.string.bit.bnot = function(x)
+super_lua.bit.bnot = function(x)
    return (d232 - 1 - (x % d232)) % d232
 end
 
-super_lua.string.bit.band = function(a, b)
+super_lua.bit.band = function(a, b)
   local r, p = 0, 1
     a, b = a % d232, b % d232
     while a > 0 and b > 0 do
@@ -303,7 +324,7 @@ super_lua.string.bit.band = function(a, b)
    return r
 end
 
-super_lua.string.bit.bxor = function(a, b)
+super_lua.bit.bxor = function(a, b)
   local r, p = 0, 1
     a, b = a % d232, b % d232
     while a > 0 or b > 0 do
@@ -314,39 +335,39 @@ super_lua.string.bit.bxor = function(a, b)
    return r
 end
 
-super_lua.string.bit.bor = function(a, b)
+super_lua.bit.bor = function(a, b)
     a, b = a % d232, b % d232
-    return (a + b - super_lua.string.bit.band(a, b)) % d232
+    return (a + b - super_lua.bit.band(a, b)) % d232
 end
 
-super_lua.string.bit.lrotate = function(x, disp)
+super_lua.bit.lrotate = function(x, disp)
     disp = disp % 32
     if disp == 0 then return x % d232 end
     x = x % d232
-    return super_lua.string.bit.bor(super_lua.string.bit.lshift(x, disp), super_lua.string.bit.rshift(x, 32 - disp))
+    return super_lua.bit.bor(super_lua.bit.lshift(x, disp), super_lua.bit.rshift(x, 32 - disp))
 end
 
-super_lua.string.bit.rrotate = function(x, disp)
+super_lua.bit.rrotate = function(x, disp)
       disp = disp % 32
       if disp == 0 then return x % d232 end
       x = x % d232
-      return super_lua.string.bit.bor(super_lua.string.bit.rshift(x, disp), super_lua.string.bit.lshift(x, 32 - disp))
+      return super_lua.bit.bor(super_lua.bit.rshift(x, disp), super_lua.bit.lshift(x, 32 - disp))
 end
 
-super_lua.string.bit.tobit = function(x)
+super_lua.bit.tobit = function(x)
    x = x % 4294967296
    if x >= 2147483648 then x = x - 4294967296 end
    return x
 end
 
-super_lua.string.bit.arshift = function(x, disp)
+super_lua.bit.arshift = function(x, disp)
    disp = disp % 32
    x = x % 4294967296
    local sign = (x >= 2147483648)
-   local shifted = super_lua.string.bit.rshift(x, disp)
+   local shifted = super_lua.bit.rshift(x, disp)
    if sign and disp > 0 then
       local mask = 4294967296 - (2 ^ (32 - disp))
-      shifted = super_lua.string.bit.bor(shifted, mask)
+      shifted = super_lua.bit.bor(shifted, mask)
    end
    return shifted
 end
@@ -563,6 +584,17 @@ super_lua.string.stego.hide = function(text, mode)
    end
 end
 
+super_lua.string.stego.reveal = function(text)
+   local newText = text
+   
+   for _, codepoint in utf8.codes(newText) do
+      if codepoint > 255 then
+         newText = newText:gsub(utf8.char(codepoint), "[U+" .. string.format("%x", codepoint) .. "]")
+      end
+   end
+   return newText
+end
+
 
 
 super_lua.string.crypt.adler32 = function(text)
@@ -620,8 +652,8 @@ end
 super_lua.string.stego.homoglyph = function(str)
    local chars = {
    	a = "а", A = "Α", b = "\u{1d5bb}", c = "\u{0441}", d = "ԁ", g = "\u{0261}",
-       e = "\u{0435}", E = "\u{2d39}", o = "\u{057d}", p = "р", y = "у", x = "x", i = "\u{0456}", n = "\u{0578}", m = "\u{1d5c6}", t = "t", r = "r", u = "\u{057d}", w = "w",
-       q = "q", s = "\u{1d5cc}", v = "ν", z = "z", f = "\u{0192}", l = "", k = "\u{03ba}", j = "\u{0458}", h = "h"
+       e = "\u{0435}", E = "\u{2d39}", o = "\u{03bf}", p = "р", y = "у", x = "x", i = "\u{0456}", n = "\u{0578}", m = "\u{1d5c6}", t = "t", r = "r", u = "\u{057d}", w = "w",
+       q = "q", s = "\u{1d5cc}", v = "ν", z = "z", f = "\u{0192}", l = "\u{01c0}", k = "\u{03ba}", j = "\u{0458}", h = "h"
    }
    
    local new = str
@@ -662,7 +694,7 @@ super_lua.string.crypt.entropy = function(text)
 end
 
 super_lua.string.crypt.sha256 = function(message)
-  local bit = super_lua.string.bit
+  local bit = super_lua.bit
   local bit_ror = bit.ror
   local band, bor, bxor, bnot = bit.band, bit.bor, bit.bxor, bit.bnot
   local lshift, rshift = bit.lshift, bit.rshift
@@ -1385,8 +1417,8 @@ super_lua.math.weight = function(val, from, to)
    g = 1,
    mg = 0.001,
    kg = 1000,
-   cent = 100000,
-   ton = 1000000,
+   q = 100000,
+   t = 1000000,
    lb = 453.59237,
    oz = 28.3495231, 
    st = 6350,
@@ -1700,20 +1732,42 @@ super_lua.table.deep_copy = function(orig)
       for orig_key, orig_value in next, orig do
          copy[super_lua.table.deep_copy(orig_key)] = super_lua.table.deep_copy(orig_value)
       end
-      setmetatable(copy, super_lua.table.deep_copy(getmetatable(orig)))
    else
       copy = orig
    end
    return copy
 end
 
-super_lua.table.to_array = function(tabl)
+super_lua.table.entries = function(tabl)
    local saved = {}
    for index, value in next, tabl do
      local newTable = {[1] = index, [2] = value}
      table.insert(saved, newTable)
    end
    return saved
+end
+
+super_lua.table.fill = function(tabl, value)
+   value = value or nil
+   for key, val in next, tabl do
+      rawset(tabl, key, val)
+   end
+end
+
+super_lua.table.unique = function(tabl)
+   local new, seen = {}, {}
+   for index, value in next, tabl do
+      if not seen[value] then
+         seen[value] = true
+         rawset(new, index, value)
+      end
+   end
+   
+   if super_lua.table.isarray(tabl) then
+      new = super_lua.table.values(new)
+   end
+   
+   return new
 end
 
 
@@ -1764,6 +1818,22 @@ end
 
 super_lua.file_manager.makefolder = function(path)
    os.execute("mkdir " .. path)
+end
+
+super_lua.file_manager.external_storage = function()
+   local new = io.popen("echo $EXTERNAL_STORAGE 2>/dev/null")
+   local result = new:read("*a"):gsub("\n$", "")
+   new:close()
+   
+   return result
+end
+
+super_lua.file_manager.home = function()
+   local new = io.popen("pwd 2>/dev/null")
+   local result = new:read("*a"):gsub("\n$", "")
+   new:close()
+   
+   return result
 end
 
 super_lua.file_manager.isfolder = function(path)
@@ -1860,6 +1930,78 @@ super_lua.file_manager.copy = function(file, folder)
    odj:close()
    
    return src
+end
+
+
+
+super_lua.debug.getid = function(object)
+   local id = ""
+   if type(object) == "string" or type(object) == "number" or type(object) == "boolean" then
+      return nil
+   end
+   
+   if type(object) == "table" and debug.getmetatable(object) and rawget(debug.getmetatable(object), "__tostring") then
+      local save = rawget(debug.getmetatable(object), "__tostring")
+      rawset(debug.getmetatable(object), "__tostring", nil)
+      id = "0x" .. tostring(object):match("0x(%x+)")
+      rawset(debug.getmetatable(object), "__tostring", save)
+   else
+      id = "0x" .. tostring(object):match("0x(%x+)")
+   end
+   return id
+end
+
+super_lua.debug.benchmark = function(func, repeats, newCycle, ...)
+   local time = os.clock()
+   repeats = math.max(repeats or 100, 1)
+   newCycle = newCycle or false
+   local args = {...}
+   
+   local function bench()
+      local nowTime = os.clock()
+      for _ = 1, repeats do
+         local a = func(table.unpack(args))
+      end
+      
+      if newCycle == false then
+         return os.clock() - nowTime
+      else
+         local finish = tostring(os.clock() - nowTime)
+         print(tostring(repeats) .. " repeats of function (" .. tostring(func) .. ") finished in " .. finish .. " seconds")
+      end
+   end
+   
+   if newCycle == false then
+      return bench()
+   else
+      coroutine.wrap(bench)()
+   end
+end
+
+super_lua.debug.is_lua = function(object)
+   if type(object) == "string" or type(object) == "number" or type(object) == "boolean" then
+      print("It is impossible to verify that the " .. type(object) .. " type is Lua")
+      return nil
+   end
+   
+   if type(object) == "function" then
+      return debug.getinfo(object).what ~= "C"
+    else
+      return string.len(super_lua.debug.getid(object)) == 18
+   end
+end
+
+super_lua.debug.dir = function(obj)
+   if type(obj) == "string" then
+      print("byte size: " .. obj:len() .. ", all chars: " .. utf8.len(obj) .. ", only ascii: " .. tostring(super_lua.string.is_ascii(obj)) .. ", entropy: " .. tostring(super_lua.string.crypt.entropy(obj)) ..
+      "\nhas null chars: " .. tostring(string.find(obj, "%z") ~= nil))
+   elseif type(obj) == "number" then
+      
+   elseif type(obj) == "function" then
+   
+   elseif type(obj) == "userdata" then
+   
+   end
 end
 
 
@@ -2154,6 +2296,27 @@ super_lua.palette.rich_text = function(params)
    
    message = message .. ">" .. text .. "</font></p>"
    return message
+end
+
+
+
+
+super_lua.time.now = function()
+   local year, month, day = os.date("!%Y"), os.date("!%m"), os.date("!%d")
+   local hour, minut, second = os.date("!%H"), os.date("!%M"), os.date("!%S")
+   
+   return {
+   	["year"] = year,
+       ["month"] = month,
+       ["day"] = day,
+       ["hour"] = hour,
+       ["minutes"] = minut,
+       ["seconds"] = second
+   }
+end
+
+super_lua.time.from_unixtime = function(unix_time)
+   return os.date("!%Y-%m-%d %H:%M:%S GMT", math.floor(tonumber(unix_time)))
 end
 
 
